@@ -1,0 +1,114 @@
+version: '3.7'
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: ./web/Dockerfile
+    image: consul1_web
+    ports:
+      - "8080:8080"
+    restart: on-failure
+    environment:
+      - PORT=8080
+      - CONSUL_HTTP_ADDR=consul-agent-web:8500
+    volumes:
+      - type: bind
+        source: ./web
+        target: /go/src/web
+    networks:
+      - consul-web
+      - services-network
+    depends_on: 
+      # - consul-server-1
+      # - consul-server-2
+      # - consul-server-bootstrap
+      - consul-agent-web
+
+  backend:
+    build:
+      context: .
+      dockerfile: ./backend/Dockerfile
+    image: consul1_backend
+    ports:
+      - "8081"
+    restart: on-failure
+    environment:
+      - PORT=8081
+      - CONSUL_HTTP_ADDR=consul-agent-backend:8500
+    volumes:
+      - type: bind
+        source: ./backend
+        target: /go/src/backend
+    networks:
+      - consul-backend
+      - services-network
+    depends_on: 
+      # - consul-server-1
+      # - consul-server-2
+      # - consul-server-bootstrap
+      - consul-agent-backend
+
+  # consul:
+  #   image: consul:1.7
+  #   environment:
+  #     - CONSUL_BIND_INTERFACE=eth0
+    # deploy:
+    #   mode: replicated
+    #   replicas: 3
+    
+    
+  consul-agent-web: &consul-agent
+    image: consul:1.7
+    networks:
+      - consul-agent-network
+      - consul-web
+    environment:
+      - CONSUL_BIND_INTERFACE=eth0
+    command: "agent -retry-join consul-server-bootstrap -client 0.0.0.0"
+
+  consul-agent-backend:
+    #  -client 0.0.0.0
+    # <<: *consul-agent
+    image: consul:1.7
+    networks:
+      - consul-agent-network
+      - consul-backend
+    environment:
+      - CONSUL_BIND_INTERFACE=eth0
+    command: "agent -retry-join consul-server-bootstrap -client 0.0.0.0"
+
+  # consul-agent-3:
+  #   <<: *consul-agent
+
+  consul-server-1: &consul-server
+    image: consul:1.7
+    networks:
+      - consul-agent-network
+    # <<: *consul-agent
+    command: "agent -server -retry-join consul-server-bootstrap -client 0.0.0.0"
+    healthcheck:
+      test: ["CMD", "curl", "http://localhost:8500"]
+      interval: 5s
+      timeout: 10s
+      retries: 5
+      start_period: 5s
+
+  consul-server-2:
+    <<: *consul-server
+
+  consul-server-bootstrap:
+    <<: *consul-server
+    # <<: *consul-agent
+    ports:
+      # - "8400:8400"
+      - "8500:8500"
+      # - "8600:8600"
+      # - "8600:8600/udp"
+    command: "agent -server -bootstrap-expect 3 -ui -client 0.0.0.0"
+
+networks:
+  services-network:
+  consul-agent-network:
+  consul-web:
+  consul-backend:
